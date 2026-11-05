@@ -31,8 +31,13 @@ jobs:
         run: |
           $exe = "target/release/bookcheckbot.exe"
           if (-not (Test-Path $exe)) { throw "Compiled executable does not exist: $exe" }
-          & $exe --help
-          if ($LASTEXITCODE -ne 0) { throw "The executable failed its --help smoke test." }
+          # 릴리스 빌드는 windows_subsystem = "windows"라 stdout이 없을 수 있어,
+          # clap은 인자 오류 시 2를 돌려줍니다. 그 외(0/1)는 정상 실행으로 봅니다.
+          & $exe --help | Out-String | Write-Host
+          $code = $LASTEXITCODE
+          Write-Host "exit code: $code"
+          if ($code -gt 1) { throw "The executable failed its --help smoke test (exit $code)." }
+          Write-Host "Smoke test OK."
 
       - name: Prepare executable, ZIP, and SHA-256 checksums
         shell: pwsh
