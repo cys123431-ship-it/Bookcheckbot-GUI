@@ -1,0 +1,15 @@
+/target/
+/shots/
+/test/
+/test2/
+/book1/
+/_captest/
+*.png
+*.pdf
+.DS_Store
+Thumbs.db
+# 이 파일은 실행 중 생성되는 캡처 폴더를 저장소에 올리지 않기 위한 것입니다.
+
+# 빌드된 실행 파일은 Releases에서 배포합니다(무결성/저장소 용량 관리).
+/Bookcheckbot.exe
+/*.exe
