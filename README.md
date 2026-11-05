@@ -6,6 +6,18 @@
 
 ## 준비
 
+### 릴리스 실행 파일 (Rust 설치 불필요)
+
+[Releases](https://github.com/cys123431-ship-it/Bookcheckbot-GUI/releases)에서 내려받으세요.
+
+- `Bookcheckbot-GUI-Windows-x64.zip` — 실행 파일 + 사용 설명서 (권장)
+- `Bookcheckbot.exe` — 단일 실행 파일
+- `SHA256SUMS.txt` — 무결성 확인용
+
+압축을 풀고 `Bookcheckbot.exe`를 더블클릭하면 캡처 설정 창이 뜹니다.
+
+### 소스에서 직접 빌드
+
 1. Windows 11에 [Rust / rustup](https://rustup.rs/)을 설치하고 터미널을 다시 엽니다.
 2. 터미널에서 `rustc --version`, `cargo --version`을 확인합니다. Rust 설치 시 MSVC C++ 빌드 도구 설치 안내가 나오면 따르세요.
 3. 저장소를 복제하고 디렉터리로 이동합니다.

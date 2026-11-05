@@ -1,0 +1,117 @@
+name: Publish Windows executable
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Bookcheckbot.exe
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Rust unit tests
+        run: cargo test --verbose
+
+      - name: Compile Windows x64 release binary
+        run: cargo build --release --verbose
+
+      - name: Smoke-test executable
+        shell: pwsh
+        run: |
+          $exe = "target/release/bookcheckbot.exe"
+          if (-not (Test-Path $exe)) { throw "Compiled executable does not exist: $exe" }
+          & $exe --help
+          if ($LASTEXITCODE -ne 0) { throw "The executable failed its --help smoke test." }
+
+      - name: Prepare executable, ZIP, and SHA-256 checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Copy-Item "target/release/bookcheckbot.exe" "dist/Bookcheckbot.exe"
+          Copy-Item "README.md" "dist/README.md"
+          Copy-Item "RUN_WINDOWS.md" "dist/RUN_WINDOWS.md"
+          Compress-Archive -Path "dist/Bookcheckbot.exe", "dist/README.md", "dist/RUN_WINDOWS.md" -DestinationPath "Bookcheckbot-GUI-Windows-x64.zip" -CompressionLevel Optimal -Force
+          $exeHash = (Get-FileHash "dist/Bookcheckbot.exe" -Algorithm SHA256).Hash.ToLower()
+          $zipHash = (Get-FileHash "Bookcheckbot-GUI-Windows-x64.zip" -Algorithm SHA256).Hash.ToLower()
+          @(
+            "$exeHash  Bookcheckbot.exe",
+            "$zipHash  Bookcheckbot-GUI-Windows-x64.zip"
+          ) | Set-Content -Path "SHA256SUMS.txt" -Encoding utf8
+          Get-ChildItem "dist" | Select-Object Name, Length | Format-Table
+
+      - name: Resolve release tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notlike "v*") { $tag = "v0.2.0" }
+          "name=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          @'
+          # Bookcheckbot GUI v0.2.0 — Windows 11 x64
+
+          Windows 11용 전자책 화면 캡처 **GUI** 릴리스입니다. 더블클릭하면 캡처 설정 창이 뜹니다.
+
+          **다운로드**
+          - `Bookcheckbot-GUI-Windows-x64.zip`: 실행 파일 + 사용 설명서 (권장)
+          - `Bookcheckbot.exe`: 단일 실행 파일
+          - `SHA256SUMS.txt`: 파일 무결성 확인용
+
+          **실행**
+          1. ZIP 압축을 풀고 `Bookcheckbot.exe`를 더블클릭합니다. (Rust 설치 불필요)
+          2. 창에서 마지막 페이지·저장 폴더 등을 입력하고 [캡처 시작]을 누릅니다.
+          3. 카운트다운 동안 전자책 뷰어를 클릭해 포커스를 맞춥니다.
+
+          명령줄 방식도 같은 파일에서 동작합니다.
+          ```powershell
+          .\Bookcheckbot.exe --pages 3 --out test
+          ```
+
+          * 64비트 Windows 실행 파일이며 Rust 설치가 필요하지 않습니다.
+          * 내장 그래픽/저사양 PC에서도 뜨도록 OpenGL(glow) 렌더러를 사용합니다.
+          * 코드 서명이 없어 Windows SmartScreen 경고가 뜰 수 있습니다. "추가 정보 → 실행"으로 진행하세요.
+          * DRM 및 캡처 제한을 우회하지 않습니다. 캡처가 허용된 콘텐츠에만 사용하세요.
+          '@ | Set-Content -Path "release-notes.md" -Encoding utf8
+          $tag = "${{ steps.tag.outputs.name }}"
+          $assets = @(
+            "dist/Bookcheckbot.exe",
+            "Bookcheckbot-GUI-Windows-x64.zip",
+            "SHA256SUMS.txt"
+          )
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --title "Bookcheckbot GUI $tag (Windows x64)" --notes-file "release-notes.md" --target $env:GITHUB_SHA
+          }
+          if ($LASTEXITCODE -ne 0) { throw "GitHub release publication failed." }
+
+      - name: Verify published release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.tag.outputs.name }}"
+          $release = gh release view $tag --json url,assets | ConvertFrom-Json
+          $names = @($release.assets | ForEach-Object { $_.name })
+          foreach ($needed in @("Bookcheckbot.exe", "Bookcheckbot-GUI-Windows-x64.zip", "SHA256SUMS.txt")) {
+            if ($names -notcontains $needed) { throw "Missing release asset: $needed" }
+          }
+          Write-Host "Release OK:" $release.url
+          $release.assets | Select-Object name,size | Format-Table
